@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Real-time Bitcoin Data with Sentiment Analysis</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body { background-color: #f0f2f5; } /* Light grey background, make sure it's visible */
+        .line { fill: none; stroke: steelblue; stroke-width: 2; } /* Ensure this class is applied to your SVG line */
+        #dataList { height: 500px; overflow-y: scroll; } /* Ensure dataList is being filled with data */
+        .data-entry { font-size: 12px; padding: 5px; } /* Check if newEntry divs are appended correctly */
+        .trend-up { color: green; } /* Ensure data entries have this class based on condition */
+        .trend-down { color: red; } /* Ensure data entries have this class based on condition */
+        .buy-indicator, .sell-indicator { stroke: currentColor; } /* Adjust for SVG color rendering */
+        .buy-indicator { color: green; } /* Define color for buy indicators */
+        .sell-indicator { color: red; } /* Define color for sell indicators */
+        @media (max-width: 600px) {
+            #chart, #dataList { flex: 1 1 100%; }
+        }
+    </style>
+</head>
+<header>
+        <h1>Real-time Bitcoin Data with Sentiment Analysis</h1>    
+</header>
+<body>
+    <div style="display: flex; flex-wrap: wrap;">
+        <div id="chart"></div>
+        <div id="dataList"></div>
+    </div>
+    <script type="text/javascript">
+        console.log("Index file is being referenced."); // This line is added to check the file reference
+        const data = []; // Holds the stream data
+        const actions = []; // Holds buy/sell actions for indicators
+        const margin = {top: 20, right: 20, bottom: 30, left: 50},
+              width = Math.min(960, window.innerWidth - 40) - margin.left - margin.right,
+              height = 500 - margin.top - margin.bottom;
+
+        const x = d3.scaleTime().range([0, width]);
+        const y = d3.scaleLinear().range([height, 0]);
+
+        const line = d3.line()
+            .x(d => x(new Date(d.Date)))
+            .y(d => y(d.Price));
+
+        const svg = d3.select("#chart").append("svg")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+            .append("g")
+            .attr("transform", `translate(${margin.left},${margin.top})`);
+
+        // Arrow markers for buy and sell actions, ensuring correct fill usage
+        svg.append("defs").selectAll("marker")
+            .data(["buy", "sell"])
+            .enter().append("marker")
+            .attr("id", d => `${d}-indicator`)
+            .attr("viewBox", "0 -5 10 10")
+            .attr("refX", 10)
+            .attr("refY", 0)
+            .attr("markerWidth", 6)
+            .attr("markerHeight", 6)
+            .attr("orient", "auto")
+            .append("path")
+            .attr("d", d => d === "buy" ? "M0,-5L10,0L0,5" : "M10,-5L0,0L10,5")
+            .attr("class", d => d + "-indicator"); // Apply class for styling
+
+        var eventSource = new EventSource("/stream");
+        eventSource.onmessage = function(event) {
+            var newData = JSON.parse(event.data.replace("data: ", ""));
+            data.push(newData[0]);
+            if (newData[0].Action === "buy" || newData[0].Action === "sell") {
+                actions.push({Date: newData[0].Date, Price: newData[0].Price, Action: newData[0].Action});
+            }
+
+            if (data.length > 50) data.shift();
+
+            x.domain(d3.extent(data, d => new Date(d.Date)));
+            y.domain([0, d3.max(data, d => d.Price)]);
+
+            svg.selectAll(".line")
+                .data([data])
+                .join("path")
+                .attr("class", "line")
+                .attr("d", line);
+
+            svg.selectAll(".axis").remove(); // Redraw axis for updates
+
+            // X Axis
+            svg.append("g")
+                .attr("transform", `translate(0,${height})`)
+                .attr("class", "axis")
+                .call(d3.axisBottom(x));
+
+            // Y Axis
+            svg.append("g")
+                .attr("class", "axis")
+                .call(d3.axisLeft(y));
+
+            // Buy/Sell indicators
+            svg.selectAll(".action-indicator")
+                .data(actions)
+                .join("line")
+                .attr("class", "action-indicator")
+                .attr("x1", d => x(new Date(d.Date)))
+                .attr("x2", d => x(new Date(d.Date)))
+                .attr("y1", height)
+                .attr("y2", d => y(d.Price))
+                .attr("marker-end", d => `url(#${d.Action}-indicator)`);
+
+            // Update dataList dynamically
+            const dataList = document.getElementById("dataList");
+            dataList.innerHTML = ''; // Clear previous entries for simplicity
+            data.forEach(d => {
+                const entry = document.createElement("div");
+                entry.classList.add("data-entry", d.Trend === 'up' ? 'trend-up' : 'trend-down');
+                entry.textContent = `Date: ${d.Date}, Price: ${d.Price}, Volume: ${d.Volume}, Action: ${d.Action}, Trend: ${d.Trend}, Symbol: ${d.Symbol}`;
+                dataList.appendChild(entry);
+            });
+        };
+
+        eventSource.onerror = function(event) {
+            console.error("EventSource failed:", event);
+        };
+    </script>
+</body>
+</html>
