@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Real-time Bitcoin Data with Sentiment Analysis</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body { background-color: #3f69a9a9; } /* Update this to change the entire background color */
+        .line { fill: none; stroke: steelblue; stroke-width: 2; }
+        #dataList { height: 500px; overflow-y: scroll; }
+        .data-entry { font-size: 12px; padding: 5px; }
+        .trend-up { color: green; }
+        .trend-down { color: red; }
+        .buy-indicator, .sell-indicator, .trend-up-indicator, .trend-down-indicator { stroke: currentColor; }
+        .buy-indicator { color: green; }
+        .sell-indicator { color: red; }
+        .trend-up-indicator { color: #76b852; } /* Example color for up trend */
+        .trend-down-indicator { color: #e74c3c; } /* Example color for down trend */
+        @media (max-width: 600px) {
+            #chart, #dataList { flex: 1 1 100%; }
+        /* Add styles for account-info */
+        .account-info { font-size: 14px; margin-bottom: 20px; }
+        }
+    </style>
+</head>
+<body>
+    <h1 style="text-align:center;">Real-time Bitcoin Data with Sentiment Analysis</h1>
+        <!-- Account Summary Section -->
+    <div class="account-info">
+        <strong>Account Summary:</strong><br>
+        Current Holdings: <span id="currentHoldings">BTC 2.5</span><br>
+        Profit Status: <span id="profitStatus">Calculating...</span>
+    </div>
+    <!-- API Key Input Section -->
+
+
+    <div style="display: flex; flex-wrap: wrap;">
+        <div id="chart"></div>
+        <div id="dataList"></div>
+    </div>
+  
+    
+    <script type="text/javascript">
+        const data = []; // Holds the stream data
+        const actions = []; // Holds buy/sell actions for indicators
+        const margin = {top: 20, right: 20, bottom: 30, left: 50},
+              width = Math.min(960, window.innerWidth - 40) - margin.left - margin.right,
+              height = 500 - margin.top - margin.bottom;
+
+        const x = d3.scaleTime().range([0, width]);
+        const y = d3.scaleLinear().range([height, 0]);
+
+        const line = d3.line()
+            .x(d => x(new Date(d.Date)))
+            .y(d => y(d.Price));
+
+        const svg = d3.select("#chart").append("svg")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+            .append("g")
+            .attr("transform", `translate(${margin.left},${margin.top})`);
+
+        svg.append("defs").selectAll("marker")
+            .data(["buy", "sell", "trend-up", "trend-down"]) // Add trend markers
+            .enter().append("marker")
+            .attr("id", d => `${d}-indicator`)
+            .attr("viewBox", "0 -5 10 10")
+            .attr("refX", 10)
+            .attr("refY", 0)
+            .attr("markerWidth", 6)
+            .attr("markerHeight", 6)
+            .attr("orient", "auto")
+            .append("path")
+            .attr("d", d => {
+                if (d === "buy" || d === "trend-up") return "M0,-5L10,0L0,5";
+                else return "M10,-5L0,0L10,5";
+            })
+            .attr("class", d => d + "-indicator");
+
+            var eventSource = new EventSource("/stream");
+        eventSource.onmessage = function(event) {
+            var newData = JSON.parse(event.data.replace("data: ", ""));
+            data.push(newData[0]);
+            if (newData[0].Action === "buy" || newData[0].Action === "sell") {
+                actions.push({Date: newData[0].Date, Price: newData[0].Price, Action: newData[0].Action});
+            }
+
+            if (data.length > 50) data.shift();
+
+            x.domain(d3.extent(data, d => new Date(d.Date)));
+            y.domain([0, d3.max(data, d => d.Price)]);
+
+            svg.selectAll(".line")
+                .data([data])
+                .join("path")
+                .attr("class", "line")
+                .attr("d", line);
+
+            svg.selectAll(".axis").remove();
+
+            svg.append("g")
+                .attr("transform", `translate(0,${height})`)
+                .attr("class", "axis")
+                .call(d3.axisBottom(x));
+
+            svg.append("g")
+                .attr("class", "axis")
+                .call(d3.axisLeft(y));
+
+            svg.selectAll("path.marker")
+                .data(actions)
+                .join("path")
+                .attr("class", "marker")
+                .attr("fill", d => d.Action === "buy" ? "green" : "red")
+                .attr("d", d => d.Action === "buy" ? "M0,-5L10,0L0,5" : "M10,-5L0,0L10,5")
+                .attr("transform", d => `translate(${x(new Date(d.Date))},${y(d.Price)})`);
+
+            // Update the dataList
+            var dataList = document.getElementById("dataList");
+            dataList.innerHTML = data.map(d => `<div class="data-entry">${d.Date}: ${d.Price}</div>`).join("");
+        };
+              
+            // Assuming you have a function that fetches Bitcoin data
+    function fetchBitcoinData() {
+        // Fetching data logic here (omitted for brevity)
+        
+        // After successfully fetching and processing the data:
+        updateProfitStatus(); // Update the profit status based on new data
+    }
+
+    // Function to update profit status
+    function updateProfitStatus() {
+        const profit = Math.random() > 0.5; // Dummy logic for profit calculation
+        document.getElementById('profitStatus').textContent = profit ? 'In Profit' : 'Not in Profit';
+        document.getElementById('profitStatus').style.color = profit ? 'green' : 'red';
+    }
+
+    // Initial call to fetch data and update profit status
+    fetchBitcoinData();
+    // Depending on your application's needs, you might call fetchBitcoinData() at regular intervals or after specific events
+</script>
+    </script>
+</body>
+</html>

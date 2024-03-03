@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Real-time Bitcoin Data</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        /* Add your CSS styling here */
+        .line { fill: none; stroke: steelblue; stroke-width: 2; }
+        #dataList { height: 500px; overflow-y: scroll; }
+        .data-entry { font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div style="display: flex;">
+        <div id="chart"></div>
+        <div id="dataList"></div>
+    </div>
+    <!-- API Key Input Section -->
+    <div class="api-key-input">
+        <form id="apiKeyForm">
+            <label for="apiKey">API Key:</label>
+            <input type="text" id="apiKey" name="apiKey"><br><br>
+            <label for="secretKey">Secret Key:</label>
+            <input type="password" id="secretKey" name="secretKey"><br><br>
+            <input type="submit" value="Submit">
+        </form>
+    </div>
+
+    <!-- Add this section below your chart div -->
+    <div id="accountInfo">
+        <h2>Account Information</h2>
+        <p>Account Number: {{ account_info.account_number }}</p>
+        <p>Buying Power: ${{ account_info.buying_power }}</p>
+        <p>Cash: ${{ account_info.cash }}</p>
+        <p>Portfolio Value: ${{ account_info.portfolio_value }}</p>
+        <!-- Add more fields as needed -->
+    </div>
+    <script type="text/javascript">
+        // JavaScript and D3.js code goes here
+        const data = [];  // This will hold the stream data
+        const margin = {top: 20, right: 20, bottom: 30, left: 50},
+            width = 960 - margin.left - margin.right,
+            height = 500 - margin.top - margin.bottom;
+
+        const x = d3.scaleTime().range([0, width]);
+        const y = d3.scaleLinear().range([height, 0]);
+
+        const line = d3.line()
+            .x(function(d) { return x(new Date(d.Date)); })
+            .y(function(d) { return y(d.Price); });
+
+        const svg = d3.select("#chart").append("svg")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+            .append("g")
+            .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+        var eventSource = new EventSource("/stream");
+        eventSource.onmessage = function(event) {
+            var newData = JSON.parse(event.data.replace("data: ", ""));
+            data.push(newData[0]);  // Assuming newData is an array of objects
+
+            if (data.length > 50) data.shift();  // Keep array size manageable
+
+            x.domain(d3.extent(data, function(d) { return new Date(d.Date); }));
+            y.domain([d3.min(data, function(d) { return d.Price; }), d3.max(data, function(d) { return d.Price; })]);
+
+            svg.selectAll(".line").remove();  // Remove the old line
+            svg.append("path")                // Add the new line
+                .data([data])
+                .attr("class", "line")
+                .attr("d", line);
+
+            svg.selectAll("g.axis").remove();  // Remove old axes
+
+            // Add the X Axis
+            svg.append("g")
+                .attr("transform", "translate(0," + height + ")")
+                .attr("class", "axis")
+                .call(d3.axisBottom(x));
+
+            // Add the Y Axis
+            svg.append("g")
+                .attr("class", "axis")
+                .call(d3.axisLeft(y));
+
+            // Update data list
+            const dataList = document.getElementById("dataList");
+            const newEntry = document.createElement("div");
+            newEntry.classList.add("data-entry");
+            newEntry.textContent = `Date: ${newData[0].Date}, Price: ${newData[0].Price}, Volume: ${newData[0].Volume}, Action: ${newData[0].Action}, Trend: ${newData[0].Trend}, Symbol: ${newData[0].Symbol}`;
+            dataList.insertBefore(newEntry, dataList.firstChild);
+        };
+    </script>
+    <script>
+        document.getElementById('apiKeyForm').addEventListener('submit', function(e) {
+            e.preventDefault();  // Prevent default form submission
+            const apiKey = document.getElementById('apiKey').value;
+            const secretKey = document.getElementById('secretKey').value;
+    
+            // Send these keys to your server using Fetch API or XMLHttpRequest
+            // For security, use POST request and HTTPS
+            fetch('http://localhost:5000/set_keys', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ apiKey: apiKey, secretKey: secretKey }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Success:', data);
+            })
+            .catch((error) => {
+                console.error('Error:', error);
+            });
+        });
+    </script>
+</body>
+</html>
